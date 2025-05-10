@@ -9,53 +9,37 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @State private var wordDefinition: WordElement?
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        VStack {
+            Text(wordDefinition?.word ?? "No word")
+            Text(wordDefinition?.phonetics?.filter({ $0.text != nil }).first?.text ?? "No phonetic")
+        }
+        .task {
+            do {
+                let wordDefinitions = try await getWordDefinition()
+                wordDefinition = wordDefinitions.first
+            } catch {
+                print("Failed to fetch word definition: \(error)")
             }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
+        }.onChange(of: wordDefinition) {
+            print(wordDefinition)
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    func getWordDefinition() async throws -> [WordElement] {
+        let endpoint = "https://api.dictionaryapi.dev/api/v2/entries/en/hello"
+        guard let url = URL(string: endpoint) else {
+            throw URLError(.badURL)
+        }
+        let (data, _) = try await URLSession.shared.data(from: url)
+        do {
+            let decodedData = try JSONDecoder().decode([WordElement].self, from: data)
+            return decodedData
+        } catch {
+            throw error
         }
     }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
-        }
-    }
-}
-
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
